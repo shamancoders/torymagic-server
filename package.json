@@ -1,0 +1,40 @@
+{
+  "name": "troymagic-server",
+  "version": "1.0.0",
+  "description": "Remote connector service",
+  "main": "start.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "ShamanCoders",
+  "license": "MIT",
+  "dependencies": {
+    "atob": "^2.1.2",
+		"body-parser": "^1.20.0",
+		"btoa": "^1.2.1",
+		"colors": "^1.4.0",
+		"cookie-parser": "^1.4.6",
+		"debug": "~4.3.4",
+		"eval": "^0.1.8",
+		"express": "^4.18.1",
+		"express-session": "^1.17.3",
+		"http-errors": "~2.0.0",
+		"jsonwebtoken": "^8.5.1",
+		"method-override": "^3.0.0",
+    "mongodb": "^4.7.0",
+		"mongoose": "^6.4.2",
+		"mongoose-aggregate-paginate-v2": "^1.0.42",
+		"mongoose-paginate-v2": "^1.7.0",
+		"morgan": "~1.10.0",
+		"multer": "^1.4.4",
+		"node-cron": "^3.0.1",
+		"node-mailer": "^0.1.1",
+		"nodemailer-smtp-transport": "^2.7.4",
+		"object-sizeof": "^1.6.3",
+		"serve-favicon": "^2.5.0",
+    "socket.io": "^4.5.1",
+		"urllib": "^2.38.0",
+		"use-strict": "^1.0.1",
+		"uuid": "^8.3.2"
+  }
+}

@@ -1,0 +1,32 @@
+// remove this line and rename this filename to "config.json"
+{
+  "name": "troymagic-server",
+  "version": "1.0.0",
+  "description": "Remote connector service",
+  "httpserver": {
+		"port": 4600
+	},
+  "mongodb": {
+		"master": "mongodb://127.0.0.1:27017/troyMagic"
+	},
+	"websocketApi": {
+		"socketCorsDomainList": [""],
+		"pingInterval":5000
+	},
+  "token": {
+		"phrase": "****",
+		"expiresIn": 86400
+	},
+	"mail": {
+		"host": "smtp.****.com",
+		"port": 587,
+		"secure": false,
+		"auth": {
+			"user": "****",
+			"pass": "****"
+		},
+		"adminMail":"****"
+	},
+	"tmpDir": "/codes/temp",
+	"status": "development"
+}
