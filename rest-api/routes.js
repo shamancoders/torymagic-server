@@ -1,4 +1,3 @@
-let protectedFields = require('./protected-fields.json')
 
 module.exports = (app) => {
 	// app.all('/', (req, res, next) => {
@@ -14,14 +13,12 @@ module.exports = (app) => {
 		res.status(200).json({ success: true, data: apiWelcomeMessage })
 	})
 
-	authControllers(app, '/api/v1/auth/:func/:param1/:param2/:param3', 'auth')
-	repoControllers(app, '/api/v1/db/:func/:param1/:param2/:param3', 'repo')
-	masterControllers(app, '/api/v1/:func/:param1/:param2/:param3', 'master')
+	masterControllers(app, '/api/v1/:func/:param1/:param2/:param3', 'controllers')
 
-	
+
 	// catch 404 and forward to error handler
 	app.use((req, res, next) => {
-		res.status(404).json({ success: false, error: { code: '404', message: 'function not found' } })
+		res.status(404).json({ success: false, error: { name: '404', message: 'function not found' } })
 	})
 
 	app.use((err, req, res, next) => {
@@ -29,185 +26,136 @@ module.exports = (app) => {
 	})
 }
 
-function repoControllers(app, route, folder) {
-	setRoutes(app, route, (req, res, next) => {
-		let ctl = getController('repo', req.params.func)
-		if (!ctl)
-			return next()
-		passport(req)
-			.then(member => {
-				getSessionDbId(member, req)
-					.then(dbModel => {
-						ctl(dbModel, member, req)
-							.then(data => {
-								if (data == undefined)
-									res.json({ success: true })
-								else if (data == null)
-									res.json({ success: true })
-								else {
-									res.status(200).json({ success: true, data: clearProtectedFields(req.params.func, data) })
-								}
-							})
-							.catch(next)
-					})
-					.catch(next)
-			})
-			.catch(next)
-	})
-}
-
-function getSessionDbId(member, req) {
-	return new Promise((resolve, reject) => {
-		let sessionId = req.body.sessionId || req.query.sessionId || req.headers.sessionId || req.body.sid || req.query.sid || req.headers.sid || ''
-		if (sessionId == '')
-			return reject({ code: 'SESSION_NOT_FOUND', message: 'The session has been terminated. Please login.' })
-		db.sessions.findOne({ _id: sessionId })
-			.then(doc => {
-				if (dbnull(doc, reject)) {
-					if (doc.passive)
-						return reject({ code: 'SESSION_NOT_FOUND', message: 'The session has been set passive. Please login.' })
-
-					if (doc.memberId != member._id)
-						return reject({ code: 'INCORRECT_DATA', message: 'Incorrect sessionId ' })
-
-					if (doc.dbId == '')
-						return reject({ code: 'SESSION_ERROR', message: 'Session does not have databaseId' })
-					getRepoDbModel(doc.dbId).then(resolve).catch(reject)
-				}
-			})
-			.catch(reject)
-	})
-}
-
-
-
-
 function masterControllers(app, route, folder) {
 	setRoutes(app, route, (req, res, next) => {
-		let ctl = getController('master', req.params.func)
+		let ctl = getController(folder, req.params.func)
 		if (!ctl)
 			return next()
 		passport(req)
-			.then(member => {
-				ctl(member, req)
-					.then(data => {
-						if (data == undefined)
-							res.json({ success: true })
-						else if (data == null)
-							res.json({ success: true })
-						else {
-							res.status(200).json({ success: true, data: clearProtectedFields(req.params.func, data) })
-						}
-					})
-					.catch(next)
+			.then(connector => {
+				let params = restHelper.getParams(req)
 
+				try {
+					ctl(connector, params, req)
+						.then(data => {
+							if (data == undefined)
+								res.json({ success: true })
+							else if (data == null)
+								res.json({ success: true })
+							else {
+								res.status(200).json({ success: true, data: data })
+							}
+						})
+						.catch(next)
+				} catch (err) {
+					sendError(err, res)
+				}
 			})
 			.catch(next)
 	})
 
 }
 
-function authControllers(app, route, folder) {
-	setRoutes(app, route, (req, res, next) => {
-		let ctl = getController('auth', req.params.func)
-		if (!ctl)
-			return next()
-		ctl(req)
-			.then(data => {
-				if (data == undefined)
-					res.json({ success: true })
-				else if (data == null)
-					res.json({ success: true })
-				else {
-					res.status(200).json({ success: true, data: clearProtectedFields(req.params.func, data) })
-				}
-			})
-			.catch(next)
+var ipList = {}
+
+function passport(req) {
+	return new Promise((resolve, reject) => {
+		let IP = req.headers['x-forwarded-for'] || req.connection.remoteAddress || ''
+		let t = (new Date()).getTime()
+		if (ipList[IP] && ipList[IP].suspended.getTime() > t) {
+			let fark = Math.ceil((ipList[IP].suspended.getTime() - t) / 1000 / 60)
+			return reject({ name: 'SPAM', message: `Your request was detected as spam. After ${fark} minutes, try again` })
+		}
+		let id = req.body.id || req.query.id || req.headers.id || ''
+		let password = req.body.password || req.query.password || req.headers.password || ''
+		if (id && password) {
+			db.connectors.findOne({ id: id, password: password })
+				.then(connDoc => {
+					if (connDoc == null) {
+						if (detectSpamAttempts(IP)) {
+							reject({ name: 'SPAM', message: `Your request was detected as spam. After 60 minutes, try again` })
+						} else {
+							reject({ name: 'AUTH', message: `Authentication failed` })
+						}
+					} else {
+						if (global.socketClients && global.socketClients[connDoc.lastUuid]) {
+							let connector = connDoc.toJSON()
+							connector.socket = global.socketClients[connDoc.lastUuid]
+							resolve(connector)
+						} else {
+							reject({ name: 'OFFLINE', message: 'Connector is not active now.' })
+						}
+					}
+				})
+				.catch(reject)
+		} else {
+			if (detectSpamAttempts(IP)) {
+				reject({ name: 'SPAM', message: `Your request was detected as spam. After 60 minutes, try again` })
+			} else {
+				reject({ name: 'AUTH', message: `Authentication failed` })
+			}
+		}
+
 	})
+}
+
+function detectSpamAttempts(IP) {
+	if (ipList[IP] == undefined) {
+		ipList[IP] = {
+			attemptCount: 1,
+			firstAttempt: new Date(),
+			suspended: (new Date).add('minute', -1)
+		}
+		return false
+	} else {
+		if (ipList[IP].firstAttempt == null) {
+			ipList[IP].firstAttempt = new Date()
+		}
+		ipList[IP].attemptCount++
+		let fark = ((new Date()).getTime() - ipList[IP].firstAttempt.getTime()) / 1000
+
+		if (ipList[IP].attemptCount > 10 && fark < 60) {
+			ipList[IP].suspended = (new Date()).add('hour', 1)
+			ipList[IP].attemptCount = 0
+			ipList[IP].firstAttempt = null
+			return true
+		} else if (ipList[IP].attemptCount > 30 && fark > 60 && fark < 3600) {
+			ipList[IP].suspended = (new Date()).add('hour', 1)
+			ipList[IP].attemptCount = 0
+			ipList[IP].firstAttempt = null
+
+			return true
+		} else if (ipList[IP].attemptCount > 10 && fark > 60) {
+			ipList[IP].attemptCount = 0
+			ipList[IP].firstAttempt = null
+			return false
+		} else {
+			return false
+		}
+
+	}
 }
 
 function getController(folder, funcName) {
-	let controllerName = path.join(__dirname, '/controllers', folder, `${funcName}.controller.js`)
+	let controllerName = path.join(__dirname, folder, `generic-command.controller.js`)
+	if(['message','mssql','mysql','pg','read-excel','write-excel','read-file','write-file','datetime','cmd'].includes(funcName)==false)
+		controllerName = path.join(__dirname, folder, `${funcName}.controller.js`)
 	if (fs.existsSync(controllerName) == false) {
 		return null
 	} else {
 		return require(controllerName)
+
 	}
 }
 
-function clearProtectedFields(funcName, data, cb) {
-	if (protectedFields != undefined) {
-		if (protectedFields[funcName] == undefined)
-			protectedFields[funcName] = protectedFields['standart']
-
-		if (data != undefined) {
-			if (Array.isArray(data)) {
-				data.forEach((e) => {
-					e = temizle(e, protectedFields[funcName].outputFields)
-				})
-
-			} else {
-				if (data.hasOwnProperty('docs')) {
-					data.docs.forEach((e) => {
-						e = temizle(e, protectedFields[funcName].outputFields)
-					})
-				}
-				data = temizle(data, protectedFields[funcName].outputFields)
-			}
-			return data
-		} else {
-			return data
-		}
-	} else {
-		return data
-	}
-
-	function temizle(obj, fieldList) {
-		if (obj != undefined) {
-			if (typeof obj['limit'] != 'undefined' && typeof obj['totalDocs'] != 'undefined' && typeof obj['totalPages'] != 'undefined' && typeof obj['page'] != 'undefined') {
-				obj['pageSize'] = obj.limit
-				obj.limit = undefined
-				delete obj.limit
-
-				obj['recordCount'] = obj.totalDocs
-				obj.totalDocs = undefined
-				delete obj.totalDocs
-
-				obj['pageCount'] = obj.totalPages
-				obj.totalPages = undefined
-				delete obj.totalPages
-
-			}
-		}
-		if (obj == undefined || fieldList == undefined) return obj
-		if (obj == null || fieldList == null) return obj
-
-		if (!Array.isArray(fieldList)) {
-			if (obj[fieldList] != undefined) {
-				obj[fieldList] = undefined
-				delete obj[fieldList]
-			}
-		} else {
-			fieldList.forEach((key) => {
-				if (obj[key] != undefined) {
-					obj[key] = undefined
-					delete obj[key]
-				}
-			})
-		}
-
-		return obj
-	}
-
-}
 
 function sendError(err, res) {
 
-	let error = { code: '403', message: '' }
+	let error = { name: '403', message: '' }
 	if (typeof err == 'string') {
 		error.message = err
 	} else {
-		error.code = err.code || err.name || 'ERROR'
+		error.name = err.code || err.name || 'ERROR'
 		if (err.message)
 			error.message = err.message
 		else
@@ -235,42 +183,25 @@ function setRoutes(app, route, cb1, cb2) {
 }
 
 
-function passport(req) {
-	return new Promise((resolve, reject) => {
-		let IP = req.headers['x-forwarded-for'] || req.connection.remoteAddress || ''
-		let exceptedFunctions = ['subscribe', 'signup', 'verify']
-		if (exceptedFunctions.includes(req.params.func)) {
-			resolve()
-		} else {
-			let token = req.body.token || req.query.token || req.headers['x-access-token'] || req.headers['token']
-			auth.verify(token)
-				.then(userInfo => resolve(userInfo))
-				.catch(reject)
-		}
-	})
-}
-
-
-
 global.restError = {
 	param1: function (req, next) {
-		next({ code: 'INCORRECT_PARAMETER', message: `function:[/${req.params.func}] [/:param1] is required` })
+		next({ name: 'INCORRECT_PARAMETER', message: `function:[/${req.params.func}] [/:param1] is required` })
 	},
 	param2: function (req, next) {
-		next({ code: 'INCORRECT_PARAMETER', message: `function:[/${req.params.func}/${req.params.param1}] [/:param2] is required` })
+		next({ name: 'INCORRECT_PARAMETER', message: `function:[/${req.params.func}/${req.params.param1}] [/:param2] is required` })
 	},
 	method: function (req, next) {
-		next({ code: 'INCORRECT_METHOD', message: `function:${req.params.func} WRONG METHOD: ${req.method}` })
+		next({ name: 'INCORRECT_METHOD', message: `function:${req.params.func} WRONG METHOD: ${req.method}` })
 	},
 	auth: function (req, next) {
-		next({ code: 'AUTH_FAILED', message: `Authentication failed` })
+		next({ name: 'AUTH_FAILED', message: `Authentication failed` })
 	},
 	data: function (req, next, field) {
 		if (field) {
-			next({ code: 'INCORRECT_DATA', message: `"${field}" Incorrect or missing data` })
+			next({ name: 'INCORRECT_DATA', message: `"${field}" Incorrect or missing data` })
 
 		} else {
-			next({ code: 'INCORRECT_DATA', message: `Incorrect or missing data` })
+			next({ name: 'INCORRECT_DATA', message: `Incorrect or missing data` })
 
 		}
 	}

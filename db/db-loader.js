@@ -174,9 +174,7 @@ function connectMongoDatabase(collectionFolder, mongoAddress, dbObj) {
 		if (collectionFolder && mongoAddress && !dbObj.conn) {
 			collectionLoader(path.join(__dirname, collectionFolder), '.collection.js', ``)
 				.then((holder) => {
-					console.log(`holder`, Object.keys(holder))
-					console.log(`mongoAddress`, mongoAddress)
-					console.log(`dbObj`, dbObj)
+				
 					dbObj.conn = mongoose.createConnection(mongoAddress, { useNewUrlParser: true, useUnifiedTopology: true, autoIndex: true })
 					dbObj.conn.on('connected', () => {
 						Object.keys(holder).forEach((key) => {

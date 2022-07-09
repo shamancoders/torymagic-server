@@ -32,7 +32,7 @@ module.exports = () => new Promise((resolve, reject) => {
 		global.util = require(path.join(__root, 'lib/util'))
 		global.auth = require(path.join(__root, 'lib/auth'))
 		global.mail = require(path.join(__root, 'lib/mail'))
-		global.spamCheck = require(path.join(__root, 'lib/spam-check'))
+		global.connectorHelper = require(path.join(__root, 'lib/connector-helper'))
 
 		// Application info
 		console.log('-'.repeat(70))

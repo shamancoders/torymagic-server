@@ -7,6 +7,7 @@ var methodOverride = require('method-override')
 var cookieParser = require('cookie-parser')
 var app = express()
 var cors = require('cors')
+global.restHelper=require('./rest-helper')
 
 module.exports = () => new Promise((resolve, reject) => {
 	app.use(cors())

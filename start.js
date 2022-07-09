@@ -31,12 +31,21 @@ function showError(err) {
 	console.log('initialize error:', err)
 }
 
+
 function testKod(a) {
 	return new Promise((resolve, reject) => {
-		
+		// connectorHelper.newId('127.0.0.1')
+		// .then(doc=>{
+		// 	console.log(`doc`, doc)
+		// 	reject('fitifiti1')
+		// })
+		// .catch(err=>{
+		// 	console.log(`err`, err)
+		// 	reject('fitifiti2')
+		// })
 		return resolve('fitifiti')
 
-		//reject('fitifiti')
+		
 	})
 
 }
